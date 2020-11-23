@@ -989,8 +989,7 @@ module internal PrintfImpl =
         | 'g' | 'G' -> 
             basicFloatToString spec
         | 'A' ->
-            let mi = mi_GenericToString.MakeGenericMethod ty
-            mi.Invoke(null, [| box spec |]) |> unbox
+            failwith <| "Tried to print with MakeGenericMethod for type: " + ty.FullName
         | 'O' -> 
             ObjectPrinter.ObjectToString(spec) 
         | 'P' -> 
