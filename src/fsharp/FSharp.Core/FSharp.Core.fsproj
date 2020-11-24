@@ -21,6 +21,10 @@
     <PackageReleaseNotes>/blob/main/release-notes.md#FSharp-Core-$(FSCoreReleaseNotesVersion)</PackageReleaseNotes>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$(Configuration) == 'Release'">
+    <OtherFlags>$(OtherFlags) --debug:portable</OtherFlags>
+  </PropertyGroup>
+
   <ItemGroup>
     <EmbeddedResource Update="FSCore.resx">
       <GenerateSource>true</GenerateSource>
