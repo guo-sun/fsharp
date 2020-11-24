@@ -972,6 +972,48 @@ module internal PrintfImpl =
 
     let mi_GenericToString = typeof<ObjectPrinter>.GetMethod("GenericToString", NonPublicStatics)
 
+    module PrintWorkaround =
+        open Microsoft.FSharp.Reflection
+
+        let rec stringVal (v: obj) (ty: Type)=
+            if FSharpType.IsUnion ty then
+                stringDu v ty
+            else if FSharpType.IsRecord ty then
+                stringRecord v ty
+            else
+                failwith "couldn't string this: " + ty.FullName
+
+        and stringDu (v: obj) (ty: Type)=
+            let (caseInfo, fields) = FSharpValue.GetUnionFields(v, ty)
+
+            let fieldStrings =
+                fields
+                |> Array.map (fun (o: obj) -> stringVal o (o.GetType()))
+                |> String.concat " "
+
+            caseInfo.Name + " " + fieldStrings
+
+        and stringRecord (v: obj) (ty: Type)=
+            let fields = FSharpType.GetRecordFields ty
+
+            let fields = 
+                [ for field in fields do
+                    yield
+                        field.Name + " = " + field.GetValue(v).ToString() ]
+                |> String.concat "; "
+
+            "{ " + fields + " }"
+
+        let valueConverter (ty: Type) (_spec: FormatSpecifier) : ValueConverter option =
+            if FSharpType.IsRecord ty then
+                Some <| ValueConverter.Make
+                    (fun vobj -> stringRecord vobj ty)
+            else if FSharpType.IsUnion ty then
+                Some <| ValueConverter.Make
+                    (fun vobj -> stringDu vobj ty)
+            else
+                None
+
     let private getValueConverter (ty: Type) (spec: FormatSpecifier) : ValueConverter = 
         match spec.TypeChar with
         | 'b' ->  
@@ -989,7 +1031,11 @@ module internal PrintfImpl =
         | 'g' | 'G' -> 
             basicFloatToString spec
         | 'A' ->
-            failwith <| "Tried to print with MakeGenericMethod for type: " + ty.FullName
+            match PrintWorkaround.valueConverter ty spec with
+            | Some valueConverter ->
+                valueConverter
+            | None ->
+                failwith <| "Tried to print with MakeGenericMethod for type: " + ty.FullName
         | 'O' -> 
             ObjectPrinter.ObjectToString(spec) 
         | 'P' -> 
