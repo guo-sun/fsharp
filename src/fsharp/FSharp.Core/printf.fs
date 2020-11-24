@@ -1005,14 +1005,18 @@ module internal PrintfImpl =
             "{ " + fields + " }"
 
         let valueConverter (ty: Type) (_spec: FormatSpecifier) : ValueConverter option =
-            if FSharpType.IsRecord ty then
-                Some <| ValueConverter.Make
-                    (fun vobj -> stringRecord vobj ty)
-            else if FSharpType.IsUnion ty then
-                Some <| ValueConverter.Make
-                    (fun vobj -> stringDu vobj ty)
-            else
-                None
+            try
+                if FSharpType.IsRecord ty then
+                    Some <| ValueConverter.Make
+                        (fun vobj -> stringRecord vobj ty)
+                else if FSharpType.IsUnion ty then
+                    Some <| ValueConverter.Make
+                        (fun vobj -> stringDu vobj ty)
+                else
+                    None
+            with
+            | :? System.NullReferenceException -> 
+                failwith <| "Couldn't convert value for type " + ty.FullName
 
     let private getValueConverter (ty: Type) (spec: FormatSpecifier) : ValueConverter = 
         match spec.TypeChar with
