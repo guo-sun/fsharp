@@ -975,13 +975,18 @@ module internal PrintfImpl =
     module PrintWorkaround =
         open Microsoft.FSharp.Reflection
 
+        let safeToString x =
+            match x with 
+            | null -> "null"
+            | _ -> x.ToString()
+
         let rec stringVal (v: obj) (ty: Type)=
             if FSharpType.IsUnion ty then
                 stringDu v ty
             else if FSharpType.IsRecord ty then
                 stringRecord v ty
             else
-                failwith "couldn't string this: " + ty.FullName
+                safeToString v
 
         and stringDu (v: obj) (ty: Type)=
             let (caseInfo, fields) = FSharpValue.GetUnionFields(v, ty)
@@ -999,24 +1004,26 @@ module internal PrintfImpl =
             let fields = 
                 [ for field in fields do
                     yield
-                        field.Name + " = " + field.GetValue(v).ToString() ]
+                        field.Name + " = " +
+                            (safeToString <| field.GetValue(v))
+                ]
                 |> String.concat "; "
 
             "{ " + fields + " }"
 
-        let valueConverter (ty: Type) (_spec: FormatSpecifier) : ValueConverter option =
+        let valueConverter (ty: Type) (spec: FormatSpecifier) : ValueConverter =
             try
                 if FSharpType.IsRecord ty then
-                    Some <| ValueConverter.Make
+                    ValueConverter.Make
                         (fun vobj -> stringRecord vobj ty)
                 else if FSharpType.IsUnion ty then
-                    Some <| ValueConverter.Make
+                    ValueConverter.Make
                         (fun vobj -> stringDu vobj ty)
                 else
-                    None
+                    ObjectPrinter.ObjectToString(spec) 
             with
-            | :? System.NullReferenceException -> 
-                failwith <| "Couldn't convert value for type " + ty.FullName
+            | :? System.NullReferenceException as ex -> 
+                raise <| System.AggregateException ("Couldn't convert value for type " + ty.FullName, ex)
 
     let private getValueConverter (ty: Type) (spec: FormatSpecifier) : ValueConverter = 
         match spec.TypeChar with
@@ -1035,11 +1042,7 @@ module internal PrintfImpl =
         | 'g' | 'G' -> 
             basicFloatToString spec
         | 'A' ->
-            match PrintWorkaround.valueConverter ty spec with
-            | Some valueConverter ->
-                valueConverter
-            | None ->
-                failwith <| "Tried to print with MakeGenericMethod for type: " + ty.FullName
+            PrintWorkaround.valueConverter ty spec
         | 'O' -> 
             ObjectPrinter.ObjectToString(spec) 
         | 'P' -> 
